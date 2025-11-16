@@ -11,16 +11,18 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class AttendanceService {
 
     @Autowired
-    private StudentRepository studentRepository; // Student Info Repo
+    private StudentRepository studentRepository;
 
     @Autowired
-    private AttendanceRepository attendanceRepository; // Attendance Log Repo
+    private AttendanceRepository attendanceRepository;
     
     public String recordAttendance(String lrn) {
         
@@ -47,5 +49,49 @@ public class AttendanceService {
         return "Success: Attendance recorded for " 
                + student.getFirstName() + " " 
                + student.getSurname() + ".";
+    }
+
+    public List<AttendanceRecord> getFilteredAttendanceRecords(LocalDate date, String searchStrand, Integer searchGrade, String searchSection) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+        
+        List<AttendanceRecord> records = attendanceRepository.findByAttendanceTimeBetween(startOfDay, endOfDay);
+        
+        List<Student> allStudents = studentRepository.findAll();
+        Map<String, Student> studentMap = allStudents.stream()
+                .collect(Collectors.toMap(Student::getLrn, student -> student));
+
+        return records.stream()
+            .map(record -> {
+                Student student = studentMap.get(record.getLrn());
+                if (student != null) {
+                    record.setSurname(student.getSurname());
+                    record.setFirstName(student.getFirstName());
+                    record.setStrand(student.getStrand());
+                    record.setGradeLevel(student.getGradeLevel());
+                    record.setSection(student.getSection());
+                }
+                return record;
+            })
+            .filter(record -> searchStrand == null || searchStrand.isEmpty() || (record.getStrand() != null && record.getStrand().equalsIgnoreCase(searchStrand)))
+            .filter(record -> searchGrade == null || (record.getGradeLevel() != null && record.getGradeLevel().equals(searchGrade)))
+            .filter(record -> searchSection == null || searchSection.isEmpty() || (record.getSection() != null && record.getSection().equalsIgnoreCase(searchSection)))
+            .collect(Collectors.toList());
+    }
+
+    public List<String> getStrandOptions() {
+        return List.of("STEM", "TVL", "HUMSS", "ABM", "GAS");
+    }
+
+    public List<Integer> getGradeOptions() {
+        return List.of(11, 12);
+    }
+
+    public List<String> getSectionOptions() {
+        return studentRepository.findAll().stream()
+            .map(Student::getSection)
+            .distinct()
+            .sorted()
+            .collect(Collectors.toList());
     }
 }
